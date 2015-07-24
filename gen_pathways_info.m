@@ -1,0 +1,101 @@
+%%%%% This script will read from "annotaions" to get the ID and counts
+%%%%% for enzymes, then find their position in the list of pathways
+clear;clc;clear;
+%% 1. read annotations
+
+% initialize a new cell-array to store each line
+annotations = {};
+fid = fopen('annotations');
+tline = fgetl(fid);
+while ischar(tline)
+    %     disp(tline)
+    annotations = [annotations; {tline}];
+    tline = fgetl(fid);
+end
+
+%% 2. get unique enzyme IDs(e.g. EC 3.1.3.15) and counts
+% initialize a cell-array to put all the ECs
+ECs = {};
+for i=1:length(annotations)
+    [startIndex,endIndex]=regexp(annotations{i},'(EC \S*))');
+    ECs = [ECs;{annotations{i}(startIndex:endIndex-1)}];
+end
+ECs = ECs(~cellfun('isempty',ECs)); % remove the empty cells
+
+% remove the trailing '.-'s and add '-' after EC in the enzyme IDs
+for i=1:length(ECs)
+    
+    index_cut=regexp(ECs{i},'.-');
+    if ~isempty(index_cut)
+        ECs{i} = ECs{i}(1:index_cut(1)-1);% remove the trailing '.-'s
+        
+    end
+    ECs{i}(3)='-'; % add '-' after EC
+end
+
+% get the total number of enzymes without ID
+num_noID = 0;
+EC_noID_index = [];
+for i=1:length(ECs)
+    if isempty(ECs{i})
+        num_noID = num_noID + 1;
+        EC_noID_index = [EC_noID_index;i];
+    end
+end
+fprintf('There are %d enzymes without ID\n',num_noID);
+
+% get the unique enzyme ID and counts
+[C,ia,ic] = unique(ECs);
+counts = [];
+for i=1:length(C)
+    counts = [counts; sum(ic==i)];
+end
+EC_counts = struct('ec',C,'counts',num2cell(counts));
+
+%% find out completeness of each pathway based on the unique enzymes
+
+% load metacyc database
+load('metacyc18.5b.mat');
+
+
+for i=1:length(EC_counts)
+    % ID and weight of an enzyme
+    EC_i = EC_counts(i).ec;
+    weight = EC_counts(i).counts; % each reaction have the same weight for this enzyme
+    % find the reactions catalyzed by this enzyme
+    index_r = find(strcmp(EC_to_reaction(:,1),EC_i));
+    Reactions_i = EC_to_reaction(index_r,2);
+    
+    if ~isempty(Reactions_i)
+        % look at each reaction catalyzed by this enzyme
+        for j=1:length(Reactions_i) 
+            Reactions_i_j = Reactions_i{j};
+            % find out if this reaction exist in any of the pathways
+            for k=1:length(Pathway)
+                match_index = find(strcmp(Pathway(k).reaction,Reactions_i_j));
+                if ~isempty(match_index)
+                    % if the pathway have no 2nd column
+                    if size(Pathway(k).reaction,2)==1
+                        Pathway(k).reaction = [Pathway(k).reaction, cell(size(Pathway(k).reaction,1),1)];
+                    end
+                    % update each cell with enzyme and counts
+                    for m = match_index
+                        Pathway(k).reaction{m,2} = [Pathway(k).reaction{m,2};{EC_i,weight}];
+                    end
+                end
+            end
+        end
+    end
+end
+
+%% Summarize the results in Pathway
+for i=1:length(Pathway)
+    if size(Pathway(i).reaction,2)==2
+        Pathway(i).completeness = sum(~cellfun('isempty',Pathway(i).reaction(:,2)))/size(Pathway(i).reaction,1);
+    else
+        Pathway(i).completeness=0;
+    end
+end
+
+%% save the results
+save('results.mat');
