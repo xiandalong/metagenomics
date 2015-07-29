@@ -55,7 +55,7 @@ EC_counts = struct('ec',C,'counts',num2cell(counts));
 %% find out completeness of each pathway based on the unique enzymes
 
 % load metacyc database
-load('metacyc18.5b.mat');
+load('metacyc18.5b.mat','EC_to_reaction','Pathway');
 
 
 for i=1:length(EC_counts)
@@ -91,7 +91,33 @@ end
 %% Summarize the results in Pathway
 for i=1:length(Pathway)
     if size(Pathway(i).reaction,2)==2
-        Pathways(i).completeness = sum(~cellfun('isempty',Pathway(3).reaction(:,2)));
+        Pathway(i).completeness = sum(~cellfun('isempty',Pathway(i).reaction(:,2)))/size(Pathway(i).reaction,1);
+    else
+        Pathway(i).completeness=0;
+    end
+    Pathway(i).Num_of_Reactions = size(Pathway(i).reaction,1);
+end
+
+%% save the results
+% save('results.mat');
+
+%% find out any pathway that's related to 'toluene' or 'degradation'
+keyword = 'toluene';
+Pathway_indices = regexp({Pathway.name},keyword);
+index_a = [];
+for i=1:length(Pathway_indices)
+    if ~isempty(Pathway_indices{i})
+       index_a = [index_a;i];
     end
 end
-            
+
+keyword = 'degradation';
+Pathway_indices = regexp({Pathway.name},keyword);
+index_b = [];
+for i=1:length(Pathway_indices)
+    if ~isempty(Pathway_indices{i})
+       index_b = [index_b;i];
+    end
+end
+index = intersect(index_a,index_b);
+Pathway_tudegradation = Pathway(index);
